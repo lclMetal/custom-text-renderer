@@ -217,6 +217,11 @@ int calculateLineWidth(Text *pText, char *pString, int line)
                         lineWidth += pFont->fontCharWidths[letterNum] + pFont->letterSpacing * (lineWidth != 0);
                         i ++;
                     }
+                    else if (pString[i + 1] == '_')
+                    {
+                        lineWidth += pFont->wordSpacing;
+                        i ++;
+                    }
                     else
                         skipEscapeSequences(pString, &i, NULL, NULL);
                 }
