@@ -17,7 +17,10 @@
 #define ABSOLUTE False
 #define RELATIVE True
 
+#ifndef BOOL_ENUM_INCLUDED
+#define BOOL_ENUM_INCLUDED
 typedef enum { False, True } bool;
+#endif
 
 #ifndef FONT_STRUCT_INCLUDED
 #define FONT_STRUCT_INCLUDED
@@ -407,9 +410,13 @@ void readFontDataFile(char *fileName, Font *fontData)
 {
     FILE *f = fopen(addFileExtension(fileName, "fdf"), "r+b");
 
-    if (f && fontData) fread(fontData, 1, sizeof *fontData, f);
-
-    fclose(f);
+    if (f)
+    {
+        if (fontData)
+            fread(fontData, 1, sizeof *fontData, f);
+        
+        fclose(f);
+    }
 }
 
 Text createText(char *string, Font *pFont, const char *parentCName, bool relative, int startX, int startY)
