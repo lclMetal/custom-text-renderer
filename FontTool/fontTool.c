@@ -27,7 +27,7 @@ void generateFontSVG(char *fileName, char *fontName, int fontSize);
 int fromASCII(int num)
 {
     int value = num - ASCII_START;
- 
+
     if (value < 0 || value > CHARS - 1) return '?' - ASCII_START;
     else return value;
 }
@@ -35,9 +35,9 @@ int fromASCII(int num)
 void getWidths(void)
 {
     int i = 0;
- 
+
     pos = 0;
- 
+
     while (i < CHARS)
     {
         SendActivationEvent("textActor");
@@ -52,15 +52,15 @@ void printText(char *string, Font *fontPointer)
     int len = strlen(string);
     int prevX = 0;
     int prevY = 150;
- 
+
     DestroyActor("textActor");
- 
+
     for (i = 0; i < len; i ++)
     {
         Actor *a;
         int tempIndentation;
-        int asciiNum = fromASCII(string[i]);
- 
+        int letterNum = fromASCII(string[i]);
+
         switch (string[i])
         {
             case ' ': prevX += fontPointer->wordSpacing; break;
@@ -72,12 +72,12 @@ void printText(char *string, Font *fontPointer)
                     prevX = tempIndentation;
                 }
             break;
- 
+
             default:
-                prevX += floor(fontPointer->fontCharWidths[asciiNum] * 0.5) + fontPointer->letterSpacing * (prevX != 0);
+                prevX += floor(fontPointer->fontCharWidths[letterNum] * 0.5) + fontPointer->letterSpacing * (prevX != 0);
                 a = CreateActor("textActor", "fontAnim", "(none)", "(none)", prevX, prevY, false);
-                a->animpos = asciiNum;
-                prevX += ceil(fontPointer->fontCharWidths[asciiNum] * 0.5);
+                a->animpos = letterNum;
+                prevX += ceil(fontPointer->fontCharWidths[letterNum] * 0.5);
             break;
         }
     }
@@ -86,11 +86,11 @@ void printText(char *string, Font *fontPointer)
 void generateFontDataFile(char *fileName)
 {
     FILE *f = fopen(addFileExtension(fileName, "fdf"), "w+b");
- 
+
     if (f)
     {
         strcpy(font.fontName, trimIllegalCharacters(fileName));
- 
+
         fwrite(&font, 1, sizeof(font), f);
         fclose(f);
     }
@@ -99,13 +99,13 @@ void generateFontDataFile(char *fileName)
 void generateFontDataCodeFile(char *fileName)
 {
     FILE *f = fopen(addFileExtension(fileName, "c"), "w+");
- 
+
     if (f)
     {
         int i, j;
- 
+
         strcpy(font.fontName, trimIllegalCharacters(fileName));
- 
+
         fprintf(f, "Font %s =\n", trimIllegalCharacters(fileName));
         fprintf(f, "{\n");
         fprintf(f, "    %2i, // Letter spacing in pixels\n", font.letterSpacing);
@@ -114,16 +114,16 @@ void generateFontDataCodeFile(char *fileName)
         fprintf(f, "    %2i, // Indentation in pixels\n", font.indentation);
         fprintf(f, "    \"%s\", // Font animation name\n", font.fontName);
         fprintf(f, "    {   // Character widths");
- 
+
         for (i = 0; i < CHARS; i ++)
         {
             if (i % 10 == 0) fprintf(f, "\n        ");
             if (i < CHARS - 1)fprintf(f, "%2i, ", font.fontCharWidths[i]);
             else fprintf(f, "%2i", font.fontCharWidths[i]);
         }
- 
+
         fprintf(f, "\n    }\n};");
- 
+
         fclose(f);
     }
 }
@@ -141,12 +141,12 @@ void generateFontSVG(char *fileName, char *fontName, int fontSize)
     {
         int i;
         char temp[6];
- 
+
         fprintf(f, "<svg>\n");
         fprintf(f, "\t<rect x=\"0\" y=\"0\" height=\"%i\" ", (int)ceil(fontSize * 1.5) * CHARS);
         fprintf(f, "width=\"%i\" ", fontSize * 2);
         fprintf(f, "style=\"fill: none; stroke: none;\"/>\n");
- 
+
         for (i = 0; i < CHARS; i ++)
         {
             switch((char)i + ASCII_START)
@@ -166,7 +166,7 @@ void generateFontSVG(char *fileName, char *fontName, int fontSize)
         }
 
         fprintf(f, "</svg>");
- 
+
         fclose(f);
     }
 }
@@ -187,12 +187,12 @@ void generateFontSVG2(char *fileName, char *fontName, int fontSize)
     {
         int i;
         char temp[6];
- 
+
         fprintf(f, "<svg>\n");
         fprintf(f, "\t<rect x=\"0\" y=\"0\" height=\"%i\" ", fontSize * 2);
         fprintf(f, "width=\"%i\" ", (int)fontSize * (CHARS + 1));
         fprintf(f, "style=\"fill: none; stroke: none;\"/>\n");
- 
+
         for (i = 0; i < CHARS; i ++)
         {
             switch((char)i + ASCII_START)
@@ -212,7 +212,7 @@ void generateFontSVG2(char *fileName, char *fontName, int fontSize)
         }
 
         fprintf(f, "</svg>");
- 
+
         fclose(f);
     }
 }
