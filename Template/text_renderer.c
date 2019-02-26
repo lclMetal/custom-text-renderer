@@ -113,7 +113,7 @@ Color extractHexColor(char *pString)
 
     sscanf(pString, "%02x%02x%02x", &rValue, &gValue, &bValue);
 
-    tempColor = createRGB(rValue, gValue, bValue);
+    tempColor = createRGB(rValue, gValue, bValue, 1.0);
 
     return tempColor;
 }
@@ -425,7 +425,7 @@ Text createText(char *string, Font *pFont, const char *parentCName, bool relativ
         temp.lastCharIndex = -1;
         strcpy(temp.parentCName, parentCName);
         temp.pFont = pFont;
-        temp.color = createRGB(255, 255, 255);
+        temp.color = createRGB(255, 255, 255, 1.0);
         temp.textAreaLeftX = 0;
         temp.textAreaTopY = 0;
         temp.textAreaRightX = 0;
