@@ -1,0 +1,4 @@
+# Ignore Game Editor undo files
+
+*.ged.undo
+*.ged.undo.tmp
