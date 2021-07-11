@@ -1,3 +1,5 @@
+#define CAPACITY_STEP 256
+
 #define ALIGN_LEFT 0
 #define ALIGN_CENTER 1
 #define ALIGN_RIGHT 2
@@ -52,6 +54,7 @@ typedef struct
     double textAreaScrollPercent;
     bool fitInArea;
 
+    size_t capacity;
     char *pString;
 
     int firstCharIndex;
@@ -412,6 +415,11 @@ void readFontDataFile(char *fileName, Font *fontData)
     }
 }
 
+size_t calculateRequiredCapacity(size_t len)
+{
+    return ((len / CAPACITY_STEP) + 1) * (size_t)CAPACITY_STEP;
+}
+
 Text createText(const char *string, Font *pFont, const char *parentCName, bool relative, int startX, int startY)
 {
     Text temp;
@@ -444,10 +452,14 @@ Text createText(const char *string, Font *pFont, const char *parentCName, bool r
     strPtr = string;
     if (strPtr == NULL)
         strPtr = strError;
-    temp.pString = calloc(strlen(strPtr) + 1, sizeof(char));
+
+    temp.capacity = calculateRequiredCapacity(strlen(strPtr));
+    temp.pString = calloc(temp.capacity + 1, sizeof(char));
 
     if (temp.pString)
         strcpy(temp.pString, strPtr);
+    else
+        temp.capacity = 0;
 
     temp.width = calculateTextWidth(&temp);
     temp.height = calculateTextHeight(&temp);
@@ -538,15 +550,22 @@ void setTextPosition(Text *pText, int posX, int posY)
 
 void setTextText(Text *pText, char *string)
 {
+    size_t reqCapacity;
     eraseText(pText);
 
-    if (pText->pString)
-        free(pText->pString);
+    if (pText->capacity != (reqCapacity = calculateRequiredCapacity(strlen(string))))
+    {
+        if (pText->pString)
+            free(pText->pString);
 
-    pText->pString = calloc(strlen(string) + 1, sizeof(char));
+        pText->capacity = reqCapacity;
+        pText->pString = calloc(pText->capacity + 1, sizeof(char));
+    }
 
     if (pText->pString)
         strcpy(pText->pString, string);
+    else
+        pText->capacity = 0;
 }
 
 void refreshText(Text *pText)
