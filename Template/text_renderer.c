@@ -78,12 +78,14 @@ void fitTextInArea(Text *pText, int topLeftX, int topLeftY, int bottomRightX, in
 void scrollTextByAmount(Text *pText, int scroll);
 void setTextScrollByPercent(Text *pText, double scrollPercent);
 void readFontDataFile(char *fileName, Font *fontData);
+size_t calculateRequiredCapacity(size_t len);
 Text createText(const char *string, Font *pFont, const char *parentCName, bool relative, int startX, int startY);
 void setTextAlignment(Text *pText, int alignment);
 void setTextColor(Text *pText, Color color);
 void setTextZDepth(Text *pText, double zDepth);
 void setTextParent(Text *pText, char *parentCName, bool keepCurrentPosition);
 void setTextPosition(Text *pText, int posX, int posY);
+void concatenateText(Text *pText, char *string);
 void setTextText(Text *pText, char *string);
 void refreshText(Text *pText);
 void eraseText(Text *pText);
@@ -546,6 +548,30 @@ void setTextPosition(Text *pText, int posX, int posY)
 
     pText->beginX = posX;
     pText->beginY = posY;
+}
+
+void concatenateText(Text *pText, char *string)
+{
+    size_t len = strlen(pText->pString) + strlen(string);
+
+    if (!pText) return;
+
+    if (len <= pText->capacity)
+    {
+        strcat(pText->pString, string);
+        return;
+    }
+    else
+    {
+        size_t reqCapacity = calculateRequiredCapacity(len);
+        pText->capacity = reqCapacity;
+        pText->pString = realloc(pText->pString, pText->capacity + 1 * sizeof(char));
+    }
+
+    if (pText->pString)
+        strcat(pText->pString, string);
+    else
+        pText->capacity = 0;
 }
 
 void setTextText(Text *pText, char *string)

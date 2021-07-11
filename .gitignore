@@ -2,3 +2,6 @@
 
 *.ged.undo
 *.ged.undo.tmp
+
+# Ignore local only files
+/local
