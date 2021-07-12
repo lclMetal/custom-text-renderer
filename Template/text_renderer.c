@@ -33,6 +33,12 @@ typedef struct
     int fontCharWidths[CHARS];
 }Font;
 
+typedef struct LetterCloneindexStruct
+{
+    int index;
+    struct LetterCloneindexStruct *next;
+}LetterCloneindex;
+
 typedef struct
 {
     bool rendered;
@@ -57,8 +63,8 @@ typedef struct
     size_t capacity;
     char *pString;
 
-    int firstCharIndex;
-    int lastCharIndex;
+    LetterCloneindex *letterIndexHead;
+    LetterCloneindex *letterIndexTail;
 
     int width;
     int height;
@@ -103,6 +109,9 @@ void handleEscapeSequences(Text *pText, int *iterator, int *pPrevX, int *pPrevY,
 void skipEscapeSequences(char *pString, int *iterator, Color *pTempColor, bool *pCustomColorPrint);
 void renderText(Text *pText);
 int renderCharacter(Text *pText, char printChar, Color color, bool relative, int xPos, int yPos, bool firstOnLine);
+LetterCloneindex *newLetterCloneindex(int index);
+void storeLetterCloneindex(Text *pText, int index);
+void freeLetterCloneindexList(Text *pText);
 
 int fromASCII(int num)
 {
@@ -434,8 +443,6 @@ Text createText(const char *string, Font *pFont, const char *parentCName, bool r
     temp.beginY = startY;
     temp.relative = relative;
     temp.alignment = ALIGN_LEFT;
-    temp.firstCharIndex = -1;
-    temp.lastCharIndex = -1;
     temp.zDepth = 0.5;
     strcpy(temp.parentCName, parentCName);
     temp.pFont = pFont;
@@ -450,6 +457,8 @@ Text createText(const char *string, Font *pFont, const char *parentCName, bool r
     temp.textAreaHeightPercent = 0.0;
     temp.textAreaScrollPercent = 1.0;
     temp.fitInArea = False;
+    temp.letterIndexHead = NULL;
+    temp.letterIndexTail = NULL;
 
     strPtr = string;
     if (strPtr == NULL)
@@ -486,20 +495,20 @@ void setTextColor(Text *pText, Color color)
 
 void setTextZDepth(Text *pText, double zDepth)
 {
+    char actorName[256];
+    LetterCloneindex *iterator;
+
     if (!pText) return;
 
     pText->zDepth = zDepth;
 
-    if (pText->firstCharIndex > -1 && pText->lastCharIndex > -1)
-    {
-        int i;
-        char temp[256];
+    iterator = pText->letterIndexHead;
 
-        for (i = pText->firstCharIndex; i <= pText->lastCharIndex; i ++)
-        {
-            sprintf(temp, "%s.%i", typeActorName[pText->lastRenderFrame], i);
-            ChangeZDepth(temp, pText->zDepth);
-        }
+    while (iterator)
+    {
+        sprintf(actorName, "%s.%i", typeActorName[pText->lastRenderFrame], iterator->index);
+        ChangeZDepth(actorName, pText->zDepth);
+        iterator = iterator->next;
     }
 }
 
@@ -509,7 +518,8 @@ void setTextParent(Text *pText, char *parentCName, bool keepCurrentPosition)
     int parentExists;
     Actor *pParent;
     Actor *pPrevParent;
-    char temp[256];
+    char actorName[256];
+    LetterCloneindex *iterator;
 
     pParent = getclone(parentCName);
     pPrevParent = getclone(pText->parentCName);
@@ -519,13 +529,13 @@ void setTextParent(Text *pText, char *parentCName, bool keepCurrentPosition)
     else
         strcpy(pText->parentCName, parentCName);
 
-    if (pText->firstCharIndex > -1 && pText->lastCharIndex > -1)
+    iterator = pText->letterIndexHead;
+
+    while (iterator)
     {
-        for (i = pText->firstCharIndex; i <= pText->lastCharIndex; i ++)
-        {
-            sprintf(temp, "%s.%i", typeActorName[pText->lastRenderFrame], i);
-            ChangeParent(temp, pText->parentCName);
-        }
+        sprintf(actorName, "%s.%i", typeActorName[pText->lastRenderFrame], iterator->index);
+        ChangeParent(actorName, pText->parentCName);
+        iterator = iterator->next;
     }
 
     pText->relative = (parentExists) ? True : False;
@@ -602,24 +612,24 @@ void refreshText(Text *pText)
 void eraseText(Text *pText)
 {
     int i;
-    char actorName[256];
     Actor *a;
+    char actorName[256];
+    LetterCloneindex *iterator;
 
     if (pText->pString && pText->rendered && pText->lastRenderFrame > -1)
     {
-        if (pText->firstCharIndex > -1 && pText->lastCharIndex > -1)
+        iterator = pText->letterIndexHead;
+
+        while (iterator)
         {
-            for (i = pText->firstCharIndex; i <= pText->lastCharIndex; i ++)
-            {
-                sprintf(actorName, "%s.%i", (pText->lastRenderFrame)?"a_typeActor2":"a_typeActor", i);
-                DestroyActor(actorName);
-            }
+            sprintf(actorName, "%s.%i", typeActorName[pText->lastRenderFrame], iterator->index);
+            DestroyActor(actorName);
+            iterator = iterator->next;
         }
 
-        pText->firstCharIndex = -1;
-        pText->lastCharIndex = -1;
         pText->rendered = False;
         pText->lastRenderFrame = -1;
+        freeLetterCloneindexList(pText);
     }
 }
 
@@ -627,23 +637,14 @@ void destroyText(Text *pText)
 {
     int i;
     char actorName[256];
+    LetterCloneindex *iterator;
+
+    if (!pText) return;
+
+    eraseText(pText);
 
     if (pText->pString)
     {
-        if (pText->firstCharIndex > -1 && pText->lastCharIndex > -1)
-        {
-            for (i = pText->firstCharIndex; i <= pText->lastCharIndex; i ++)
-            {
-                sprintf(actorName, "%s.%i", (pText->lastRenderFrame)?"a_typeActor2":"a_typeActor", i);
-                DestroyActor(actorName);
-            }
-        }
-
-        pText->firstCharIndex = -1;
-        pText->lastCharIndex = -1;
-        pText->rendered = False;
-        pText->lastRenderFrame = -1;
-
         free(pText->pString);
         pText->pString = NULL;
     }
@@ -872,17 +873,13 @@ int renderCharacter(Text *pText, char printChar, Color color, bool relative, int
         else
             a = CreateActor(typeActorName[frame % 2], pFont->fontName, "(none)", "(none)", prevX, yPos, true);
 
+        storeLetterCloneindex(pText, a->cloneindex);
+
         if (actorExists2(pParent))
             ChangeParent(a->clonename, pText->parentCName);
 
         colorActor(a, color);
         ChangeZDepth(a->clonename, pText->zDepth);
-
-        if (pText->firstCharIndex == -1)
-            pText->firstCharIndex = a->cloneindex;
-
-        if (a->cloneindex > pText->lastCharIndex);
-            pText->lastCharIndex = a->cloneindex;
 
         a->animpos = letterNum;
     }
@@ -890,4 +887,52 @@ int renderCharacter(Text *pText, char printChar, Color color, bool relative, int
     prevX += ceil(pFont->fontCharWidths[letterNum] * 0.5);
 
     return prevX;
+}
+
+LetterCloneindex *newLetterCloneindex(int index)
+{
+    LetterCloneindex *new = malloc(sizeof *new);
+
+    if (!new) return NULL;
+
+    new->index = index;
+    new->next = NULL;
+
+    return new;
+}
+
+void storeLetterCloneindex(Text *pText, int index)
+{
+    LetterCloneindex *new = newLetterCloneindex(index);
+
+    if (!pText) return;
+
+    if (!pText->letterIndexHead && !pText->letterIndexTail)
+    {
+        pText->letterIndexHead = pText->letterIndexTail = new;
+    }
+    else
+    {
+        pText->letterIndexTail->next = new;
+        pText->letterIndexTail = new;
+    }
+}
+
+void freeLetterCloneindexList(Text *pText)
+{
+    LetterCloneindex *iterator, *temp;
+
+    if (!pText) return;
+
+    iterator = pText->letterIndexHead;
+
+    while (iterator)
+    {
+        temp = iterator->next;
+        free(iterator);
+        iterator = temp;
+    }
+
+    pText->letterIndexHead = NULL;
+    pText->letterIndexTail = NULL;
 }
