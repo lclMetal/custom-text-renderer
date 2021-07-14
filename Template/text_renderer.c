@@ -112,6 +112,11 @@ int renderCharacter(Text *pText, char printChar, Color color, bool relative, int
 LetterCloneindex *newLetterCloneindex(int index);
 void storeLetterCloneindex(Text *pText, int index);
 void freeLetterCloneindexList(Text *pText);
+void execOnLCList(Text *pText, LetterCloneindex *list, LetterCloneindex *(*pFunc)(Text *, LetterCloneindex *));
+LetterCloneindex *freeLC(Text *pText, LetterCloneindex *this);
+LetterCloneindex *setLCZDepth(Text *pText, LetterCloneindex *this);
+LetterCloneindex *setLCParent(Text *pText, LetterCloneindex *this);
+LetterCloneindex *eraseLC(Text *pText, LetterCloneindex *this);
 
 int fromASCII(int num)
 {
@@ -413,15 +418,14 @@ void setTextScrollByPercent(Text *pText, double scrollPercent)
     refreshText(pText);
 }
 
+// TODO: convert to function that returns error codes for how the reading went
 void readFontDataFile(char *fileName, Font *fontData)
 {
     FILE *f = fopen(addFileExtension(fileName, "fdf"), "r+b");
 
     if (f)
     {
-        if (fontData)
-            fread(fontData, 1, sizeof *fontData, f);
-
+        fread(fontData, sizeof *fontData, 1, f);
         fclose(f);
     }
 }
@@ -478,6 +482,58 @@ Text createText(const char *string, Font *pFont, const char *parentCName, bool r
     return temp;
 }
 
+void execOnLCList(Text *pText, LetterCloneindex *list, LetterCloneindex *(*pFunc)(Text *, LetterCloneindex *))
+{
+    LetterCloneindex *iterator = list, *next;
+
+    while (iterator)
+    {
+        next = (*pFunc)(pText, iterator);
+        iterator = next;
+    }
+}
+
+LetterCloneindex *newLetterCloneindex(int index)
+{
+    LetterCloneindex *new = malloc(sizeof *new);
+
+    if (!new) return NULL;
+
+    new->index = index;
+    new->next = NULL;
+
+    return new;
+}
+
+void storeLetterCloneindex(Text *pText, int index)
+{
+    LetterCloneindex *new = newLetterCloneindex(index);
+
+    if (!pText->letterIndexHead && !pText->letterIndexTail)
+    {
+        pText->letterIndexHead = pText->letterIndexTail = new;
+    }
+    else
+    {
+        pText->letterIndexTail->next = new;
+        pText->letterIndexTail = new;
+    }
+}
+
+LetterCloneindex *freeLC(Text *pText, LetterCloneindex *this)
+{
+    LetterCloneindex *next = this->next;
+    free(this);
+    return next;
+}
+
+void freeLetterCloneindexList(Text *pText)
+{
+    execOnLCList(pText, pText->letterIndexHead, &freeLC);
+    pText->letterIndexHead = NULL;
+    pText->letterIndexTail = NULL;
+}
+
 void setTextAlignment(Text *pText, int alignment)
 {
     if (pText->alignment != alignment)
@@ -493,33 +549,33 @@ void setTextColor(Text *pText, Color color)
     pText->color = color;
 }
 
-void setTextZDepth(Text *pText, double zDepth)
+LetterCloneindex *setLCZDepth(Text *pText, LetterCloneindex *this)
 {
     char actorName[256];
-    LetterCloneindex *iterator;
+    sprintf(actorName, "%s.%i", typeActorName[pText->lastRenderFrame], this->index);
+    ChangeZDepth(actorName, pText->zDepth);
+    return this->next;
+}
 
-    if (!pText) return;
-
+void setTextZDepth(Text *pText, double zDepth)
+{
     pText->zDepth = zDepth;
+    execOnLCList(pText, pText->letterIndexHead, &setLCZDepth);
+}
 
-    iterator = pText->letterIndexHead;
-
-    while (iterator)
-    {
-        sprintf(actorName, "%s.%i", typeActorName[pText->lastRenderFrame], iterator->index);
-        ChangeZDepth(actorName, pText->zDepth);
-        iterator = iterator->next;
-    }
+LetterCloneindex *setLCParent(Text *pText, LetterCloneindex *this)
+{
+    char actorName[256];
+    sprintf(actorName, "%s.%i", typeActorName[pText->lastRenderFrame], this->index);
+    ChangeParent(actorName, pText->parentCName);
+    return this->next;
 }
 
 void setTextParent(Text *pText, char *parentCName, bool keepCurrentPosition)
 {
-    int i;
     int parentExists;
     Actor *pParent;
     Actor *pPrevParent;
-    char actorName[256];
-    LetterCloneindex *iterator;
 
     pParent = getclone(parentCName);
     pPrevParent = getclone(pText->parentCName);
@@ -529,15 +585,7 @@ void setTextParent(Text *pText, char *parentCName, bool keepCurrentPosition)
     else
         strcpy(pText->parentCName, parentCName);
 
-    iterator = pText->letterIndexHead;
-
-    while (iterator)
-    {
-        sprintf(actorName, "%s.%i", typeActorName[pText->lastRenderFrame], iterator->index);
-        ChangeParent(actorName, pText->parentCName);
-        iterator = iterator->next;
-    }
-
+    execOnLCList(pText, pText->letterIndexHead, &setLCParent);
     pText->relative = (parentExists) ? True : False;
 
     if (keepCurrentPosition)
@@ -554,8 +602,6 @@ void setTextParent(Text *pText, char *parentCName, bool keepCurrentPosition)
 
 void setTextPosition(Text *pText, int posX, int posY)
 {
-    if (!pText) return;
-
     pText->beginX = posX;
     pText->beginY = posY;
 }
@@ -563,8 +609,6 @@ void setTextPosition(Text *pText, int posX, int posY)
 void concatenateText(Text *pText, char *string)
 {
     size_t len = strlen(pText->pString) + strlen(string);
-
-    if (!pText) return;
 
     if (len <= pText->capacity)
     {
@@ -609,24 +653,20 @@ void refreshText(Text *pText)
     renderText(pText);
 }
 
+LetterCloneindex *eraseLC(Text *pText, LetterCloneindex *this)
+{
+    char actorName[256];
+    sprintf(actorName, "%s.%i", typeActorName[pText->lastRenderFrame], this->index);
+    DestroyActor(actorName);
+    this->index = -1;
+    return this->next;
+}
+
 void eraseText(Text *pText)
 {
-    int i;
-    Actor *a;
-    char actorName[256];
-    LetterCloneindex *iterator;
-
-    if (pText->pString && pText->rendered && pText->lastRenderFrame > -1)
+    if (pText && pText->pString && pText->rendered && pText->lastRenderFrame > -1)
     {
-        iterator = pText->letterIndexHead;
-
-        while (iterator)
-        {
-            sprintf(actorName, "%s.%i", typeActorName[pText->lastRenderFrame], iterator->index);
-            DestroyActor(actorName);
-            iterator = iterator->next;
-        }
-
+        execOnLCList(pText, pText->letterIndexHead, &eraseLC);
         pText->rendered = False;
         pText->lastRenderFrame = -1;
         freeLetterCloneindexList(pText);
@@ -635,12 +675,6 @@ void eraseText(Text *pText)
 
 void destroyText(Text *pText)
 {
-    int i;
-    char actorName[256];
-    LetterCloneindex *iterator;
-
-    if (!pText) return;
-
     eraseText(pText);
 
     if (pText->pString)
@@ -887,52 +921,4 @@ int renderCharacter(Text *pText, char printChar, Color color, bool relative, int
     prevX += ceil(pFont->fontCharWidths[letterNum] * 0.5);
 
     return prevX;
-}
-
-LetterCloneindex *newLetterCloneindex(int index)
-{
-    LetterCloneindex *new = malloc(sizeof *new);
-
-    if (!new) return NULL;
-
-    new->index = index;
-    new->next = NULL;
-
-    return new;
-}
-
-void storeLetterCloneindex(Text *pText, int index)
-{
-    LetterCloneindex *new = newLetterCloneindex(index);
-
-    if (!pText) return;
-
-    if (!pText->letterIndexHead && !pText->letterIndexTail)
-    {
-        pText->letterIndexHead = pText->letterIndexTail = new;
-    }
-    else
-    {
-        pText->letterIndexTail->next = new;
-        pText->letterIndexTail = new;
-    }
-}
-
-void freeLetterCloneindexList(Text *pText)
-{
-    LetterCloneindex *iterator, *temp;
-
-    if (!pText) return;
-
-    iterator = pText->letterIndexHead;
-
-    while (iterator)
-    {
-        temp = iterator->next;
-        free(iterator);
-        iterator = temp;
-    }
-
-    pText->letterIndexHead = NULL;
-    pText->letterIndexTail = NULL;
 }
