@@ -102,9 +102,18 @@ int fromASCII(int num);
 Color extractHexColor(char *pString);
 int calculateTextHeight(Text *pText);
 int calculateTextWidth(Text *pText);
-int calculateLineWidth(Text *pText, char *pString, int line);
+int getSpecialCharWidth(Text *pText, int pos);
+int getCharWidth(Text *pText, int pos);
+int isIndentationAllowed(Text *pText);
+int getPrevTabStop(Text *pText, int lineWidth);
+int getNextTabStopOffset(Text *pText, int lineWidth);
+int strCharsLeft(const char *str, int pos);
+int isPrintable(const char *str, int pos);
+int getLetterSpacing(Text *pText, int lineWidth, int charWidth, int pos);
+int calculateLineSubRangeWidth(Text *pText, int start, int end);
+int calculateLineTailWidth(Text *pText, int start);
 int parseToNextLineStart(Text *pText, int startPosition, Color *pTempColor, bool *pCustomColorPrint);
-void replaceChar(char *pString, char replace, char new);
+void replaceAllInstancesOfChar(char *pString, char replace, char new);
 void handleEscapeSequences(Text *pText, int *iterator, int *pPrevX, int *pPrevY, Color *pTempColor, bool *pCustomColorPrint, bool *firstOnLine);
 void skipEscapeSequences(char *pString, int *iterator, Color *pTempColor, bool *pCustomColorPrint);
 void renderText(Text *pText);
@@ -161,18 +170,16 @@ int calculateTextWidth(Text *pText)
     int len;
     int lineWidth;
     int maximumLineWidth;
-    int lineCount = 0;
     char *pString = pText->pString;
 
-    maximumLineWidth = calculateLineWidth(pText, pString, 0);
+    maximumLineWidth = calculateLineTailWidth(pText, 0);
     len = strlen(pString);
 
     for (i = 0; i < len; i ++)
     {
         if (pString[i] == '\n' || pString[i] == '\v')
         {
-            lineCount ++;
-            lineWidth = calculateLineWidth(pText, pString, lineCount);
+            lineWidth = calculateLineTailWidth(pText, i + 1);
 
             if (lineWidth > maximumLineWidth) maximumLineWidth = lineWidth;
         }
@@ -181,73 +188,122 @@ int calculateTextWidth(Text *pText)
     return maximumLineWidth;
 }
 
-int calculateLineWidth(Text *pText, char *pString, int line)
+int getSpecialCharWidth(Text *pText, int pos)
 {
-    int i;
-    int letterNum;
-    int len = strlen(pString);
-    int currentLine = 0;
-    int lineStart = 0;
-    int lineWidth = 0;
-    int maximumLineWidth = 0;
-    Font *pFont = pText->pFont;
+    int letterNum = 0;
+    int len = strlen(pText->pString);
 
-    if (line > 0)
+    if (pos < len - 1)
     {
-        for (i = 0; i < len; i ++)
+        letterNum = fromASCII(pText->pString[pos]);
+
+        switch (pText->pString[pos])
         {
-            if (pString[i] == '\n' || pString[i] == '\v')
-            {
-                currentLine ++;
-                if (currentLine == line)
-                {
-                    lineStart = i + 1;
-                    break;
-                }
-            }
+            case '$':   return pText->pFont->fontCharWidths[letterNum];
+            case '_':   return pText->pFont->wordSpacing;
+            default:    return 0;
         }
     }
 
-    for (i = lineStart; i < len; i ++)
+    return 0;
+}
+
+int getCharWidth(Text *pText, int pos)
+{
+    int letterNum = fromASCII(pText->pString[pos]);
+
+    switch (pText->pString[pos])
     {
-        letterNum = fromASCII(pString[i]);
+        case '\n':
+        case '\v':
+        case '\t':  return 0;
+        case ' ':   return pText->pFont->wordSpacing;
+        case '$':   return getSpecialCharWidth(pText, pos + 1);
+        default:    return pText->pFont->fontCharWidths[letterNum];
+    }
+}
 
-        if (pString[i] == '\n' || pString[i] == '\v') return lineWidth;
+int isIndentationAllowed(Text *pText)
+{
+    return (pText->pFont->indentation && pText->alignment == ALIGN_LEFT);
+}
 
-        switch (pString[i])
+int getPrevTabStop(Text *pText, int lineWidth)
+{
+    int tab = pText->pFont->indentation;
+    return ceil(lineWidth / tab) * tab;
+}
+
+int getNextTabStopOffset(Text *pText, int lineWidth)
+{
+    int tab = pText->pFont->indentation;
+
+    if (isIndentationAllowed(pText))
+        return getPrevTabStop(pText, lineWidth) + tab - lineWidth;
+
+    return 0;
+}
+
+int strCharsLeft(const char *str, int pos)
+{
+    return strlen(str) - pos - 1;
+}
+
+int isPrintable(const char *str, int pos)
+{
+    char c = str[pos];
+    int len = strlen(str);
+
+    switch (c)
+    {
+        case ' ':
+        case '\t':
+        case '\n':
+        case '\v': return 0;
+
+        case '$':
+            return (strCharsLeft(str, pos) > 0 && str[pos + 1] == '$');
+
+        default: return 1;
+    }
+
+}
+
+int getLetterSpacing(Text *pText, int lineWidth, int charWidth, int pos)
+{
+    if (isPrintable(pText->pString, pos))
+        return pText->pFont->letterSpacing * (lineWidth > charWidth);
+    else
+        return 0;
+}
+
+int calculateLineSubRangeWidth(Text *pText, int start, int end)
+{
+    int i           = 0;
+    int lineWidth   = 0;
+    int curCharW    = 0;
+
+    for (i = start; i < end; i++)
+    {
+        lineWidth += curCharW = getCharWidth(pText, i);
+        lineWidth += getLetterSpacing(pText, lineWidth, curCharW, i);
+
+        switch (pText->pString[i])
         {
-            case ' ': lineWidth += pFont->wordSpacing; break;
-            case '\t':
-                if (pFont->indentation != 0 && pText->alignment == ALIGN_LEFT)
-                {
-                    int tempIndentation = ceil(lineWidth / pFont->indentation) * pFont->indentation + pFont->indentation;
-                    lineWidth = tempIndentation;
-                }
-            break;
-            case '$':
-                if (i < len - 1)
-                {
-                    if (pString[i + 1] == '$')
-                    {
-                        lineWidth += pFont->fontCharWidths[letterNum] + pFont->letterSpacing * (lineWidth != 0);
-                        i ++;
-                    }
-                    else if (pString[i + 1] == '_')
-                    {
-                        lineWidth += pFont->wordSpacing;
-                        i ++;
-                    }
-                    else
-                        skipEscapeSequences(pString, &i, NULL, NULL);
-                }
-            break;
-            default:
-                lineWidth += pFont->fontCharWidths[letterNum] + pFont->letterSpacing * (lineWidth != 0);
-            break;
+            case '$':   skipEscapeSequences(pText->pString, &i, NULL, NULL); break;
+            case '\t':  lineWidth += getNextTabStopOffset(pText, lineWidth); break;
+            case '\n':
+            case '\v':  return lineWidth;
+            default:    break;
         }
     }
 
     return lineWidth;
+}
+
+int calculateLineTailWidth(Text *pText, int start)
+{
+    return calculateLineSubRangeWidth(pText, start, strlen(pText->pString));
 }
 
 int parseToNextLineStart(Text *pText, int startPosition, Color *pTempColor, bool *pCustomColorPrint)
@@ -274,7 +330,7 @@ int parseToNextLineStart(Text *pText, int startPosition, Color *pTempColor, bool
     return -1;
 }
 
-void replaceChar(char *pString, char replace, char new)
+void replaceAllInstancesOfChar(char *pString, char replace, char new)
 {
     int i;
     int len = strlen(pString);
@@ -298,7 +354,7 @@ void fitTextInWidth(Text *pText, int widthLimit)
     int len;
     char *pString = pText->pString;
 
-    replaceChar(pString, '\n', ' ');
+    replaceAllInstancesOfChar(pString, '\n', ' ');
 
     len = strlen(pString);
 
@@ -311,7 +367,7 @@ void fitTextInWidth(Text *pText, int widthLimit)
             tempLine = calloc(charCount + 1, sizeof(char));
             strncpy(tempLine, &pString[currentLineStart], charCount);
 
-            lineWidth = calculateLineWidth(pText, tempLine, 0);
+            lineWidth = calculateLineSubRangeWidth(pText, currentLineStart, currentLineStart + charCount);
             lineCharCount = strlen(tempLine);
 
             if (maximumLineWidth == 0 && i < len - 1)
@@ -788,8 +844,14 @@ void skipEscapeSequences(char *pString, int *iterator, Color *pTempColor, bool *
                 else
                     *iterator += len - *iterator; // Skip to the end of the string
             break;
+            default: break;
         }
     }
+}
+
+int getLineStartX(Text *pText, int pos)
+{
+
 }
 
 void renderText(Text *pText)
@@ -808,11 +870,12 @@ void renderText(Text *pText)
     if (pText->rendered)
         eraseText(pText);
 
+    prevX = getLineStartX(pText, 0);
     switch (pText->alignment)
     {
         case ALIGN_LEFT: prevX = pText->beginX; break;
-        case ALIGN_CENTER: prevX = pText->beginX - calculateLineWidth(pText, pText->pString, currentLine) * 0.5; break;
-        case ALIGN_RIGHT: prevX = pText->beginX - calculateLineWidth(pText, pText->pString, currentLine); break;
+        case ALIGN_CENTER: prevX = pText->beginX - calculateLineTailWidth(pText, 0) * 0.5; break;
+        case ALIGN_RIGHT: prevX = pText->beginX - calculateLineTailWidth(pText, 0); break;
     }
 
     prevY = (pText->fitInArea) ? pText->textAreaScrollPosition : pText->beginY;
@@ -836,8 +899,8 @@ void renderText(Text *pText)
                     switch (pText->alignment)
                     {
                         case ALIGN_LEFT: prevX = pText->beginX; break;
-                        case ALIGN_CENTER: prevX = pText->beginX - calculateLineWidth(pText, pText->pString, currentLine) * 0.5; break;
-                        case ALIGN_RIGHT: prevX = pText->beginX - calculateLineWidth(pText, pText->pString, currentLine); break;
+                        case ALIGN_CENTER: prevX = pText->beginX - calculateLineTailWidth(pText, skipTo) * 0.5; break;
+                        case ALIGN_RIGHT: prevX = pText->beginX - calculateLineTailWidth(pText, skipTo); break;
                     }
 
                     prevY += pFont->lineSpacing;
@@ -859,8 +922,8 @@ void renderText(Text *pText)
                 switch (pText->alignment)
                 {
                     case ALIGN_LEFT: prevX = pText->beginX; break;
-                    case ALIGN_CENTER: prevX = pText->beginX - calculateLineWidth(pText, pText->pString, currentLine) * 0.5; break;
-                    case ALIGN_RIGHT: prevX = pText->beginX - calculateLineWidth(pText, pText->pString, currentLine); break;
+                    case ALIGN_CENTER: prevX = pText->beginX - calculateLineTailWidth(pText, i + 1) * 0.5; break;
+                    case ALIGN_RIGHT: prevX = pText->beginX - calculateLineTailWidth(pText, i + 1); break;
                 }
 
                 prevY += pFont->lineSpacing;

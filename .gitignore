@@ -5,3 +5,6 @@
 
 # Ignore local only files
 /local
+
+# Ignore debug log files
+*.log
