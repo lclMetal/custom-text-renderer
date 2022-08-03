@@ -699,6 +699,13 @@ void concatenateText(Text *pText, char *string)
 void concatenateCharToText(Text *pText, char c)
 {
     char temp[2];
+
+    if (c == '\b')
+    {
+        pText->pString[strlen(pText->pString) - (strlen(pText->pString) > 0)] = '\0';
+        return;
+    }
+
     sprintf(temp, "%c", c);
     concatenateText(pText, temp);
 }
