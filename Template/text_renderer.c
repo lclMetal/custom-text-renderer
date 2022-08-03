@@ -705,6 +705,11 @@ void concatenateCharToText(Text *pText, char c)
         pText->pString[strlen(pText->pString) - (strlen(pText->pString) > 0)] = '\0';
         return;
     }
+    else if (c == '$')
+    {
+        concatenateText(pText, "$$");
+        return;
+    }
 
     sprintf(temp, "%c", c);
     concatenateText(pText, temp);
