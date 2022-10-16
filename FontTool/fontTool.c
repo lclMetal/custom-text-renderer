@@ -8,6 +8,7 @@ typedef struct
     int letterSpacing;
     int wordSpacing;
     int lineSpacing;
+    int baselineOffset;
     int indentation;
     char fontName[256];
     int fontCharWidths[CHARS];
@@ -15,7 +16,7 @@ typedef struct
 
 int pos;
 int exportType = EXPORT_CODE;
-Font font = { 1, 6, 25, 28, "default"};
+Font font = { 1, 6, 25, 0, 28, "default"};
 
 int fromASCII(int num);
 void getWidths(void);
@@ -51,7 +52,7 @@ void printText(char *string, Font *fontPointer)
     int i;
     int len = strlen(string);
     int prevX = 0;
-    int prevY = 150;
+    int prevY = 175;
 
     DestroyActor("textActor");
 
@@ -111,6 +112,7 @@ void generateFontDataCodeFile(char *fileName)
         fprintf(f, "    %2i, // Letter spacing in pixels\n", font.letterSpacing);
         fprintf(f, "    %2i, // Word spacing in pixels\n", font.wordSpacing);
         fprintf(f, "    %2i, // Line spacing in pixels\n", font.lineSpacing);
+        fprintf(f, "    %2i, // Baseline offset in pixels\n", font.baselineOffset);
         fprintf(f, "    %2i, // Indentation in pixels\n", font.indentation);
         fprintf(f, "    \"%s\", // Font animation name\n", font.fontName);
         fprintf(f, "    {   // Character widths");
